@@ -1,14 +1,17 @@
 package app.alotube;
 
 import android.app.Activity;
+import android.app.PictureInPictureParams;
 import android.content.ContentValues;
 import android.content.Intent;
+import android.content.res.Configuration;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.provider.MediaStore;
 import android.util.Base64;
+import android.util.Rational;
 import android.view.View;
 import android.webkit.CookieManager;
 import android.webkit.JavascriptInterface;
@@ -94,6 +97,10 @@ public class MainActivity extends Activity {
         setup(yt, false);
         ytBox.addView(yt, new LinearLayout.LayoutParams(-1, 0, 1f));
         root.addView(ytBox, new FrameLayout.LayoutParams(-1, -1));
+
+        if (Build.VERSION.SDK_INT >= 33) {
+            requestPermissions(new String[]{"android.permission.POST_NOTIFICATIONS"}, 2);
+        }
 
         web.loadUrl(ORIGIN + "/assets/alotube.html");
     }
@@ -369,6 +376,42 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        public void pip() {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        PictureInPictureParams p = new PictureInPictureParams.Builder()
+                                .setAspectRatio(new Rational(16, 9)).build();
+                        enterPictureInPictureMode(p);
+                    } catch (Exception e) {
+                        // el dispositivo no permite ventana flotante
+                    }
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void audioStart(String title) {
+            try {
+                Intent i = new Intent(MainActivity.this, PlaybackService.class);
+                i.putExtra("title", title);
+                startForegroundService(i);
+            } catch (Exception e) {
+                // sin permiso para iniciar el servicio
+            }
+        }
+
+        @JavascriptInterface
+        public void audioStop() {
+            try {
+                stopService(new Intent(MainActivity.this, PlaybackService.class));
+            } catch (Exception e) {
+                // ignorar
+            }
+        }
+
+        @JavascriptInterface
         public void openYouTube() {
             runOnUiThread(new Runnable() {
                 @Override
@@ -388,6 +431,12 @@ public class MainActivity extends Activity {
             chooser.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(res, data));
             chooser = null;
         }
+    }
+
+    @Override
+    public void onPictureInPictureModeChanged(boolean inPip, Configuration cfg) {
+        super.onPictureInPictureModeChanged(inPip, cfg);
+        web.evaluateJavascript("window.__pip&&window.__pip(" + inPip + ")", null);
     }
 
     @Override
